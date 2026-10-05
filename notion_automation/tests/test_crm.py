@@ -8,12 +8,14 @@ import alertas
 import handlers.crm as crm
 
 
-def _page_crm(email="cliente@x.com", sw="Constructora Demo SpA", tarifa=150000):
+def _page_crm(email="cliente@x.com", sw="Constructora Demo SpA", tarifa=150000,
+              archivos=None):
     return {
         "properties": {
             crm.SW: {"type": "title", "title": [{"plain_text": sw}]},
             crm.EMAIL_CLIENTE: {"type": "email", "email": email},
             crm.TARIFA: {"type": "number", "number": tarifa},
+            crm.ADJUNTOS: {"type": "files", "files": archivos or []},
         }
     }
 
@@ -85,3 +87,38 @@ class TestCRMCobranza:
             r = crm.procesar("p6")
         assert r["ok"] is False and "403" in r["motivo"]
         assert m.called and "403" in m.call_args[0][3]
+
+    def test_columnas_de_gestion_de_cobros(self):
+        # Nombres EXACTOS de la base '🔓 Gestión de Cobros' (verificados por API
+        # el 05-oct-2026): la antigua 'Tarifa de cobro mensual' ya no existe.
+        assert crm.TARIFA == "Honorario del mes"
+        assert crm.ADJUNTOS == "Archivos y multimedia"
+
+    def test_adjunta_los_archivos_de_la_fila(self):
+        archivos = [
+            {"name": "factura-octubre.pdf", "type": "file",
+             "file": {"url": "https://s3.notion/factura.pdf"}},
+            {"name": "detalle.pdf", "type": "external",
+             "external": {"url": "https://ejemplo.cl/detalle.pdf"}},
+        ]
+        capt = {}
+        with patch.object(nc, "get_page", return_value=_page_crm(archivos=archivos)), \
+             patch.object(es, "enviar", side_effect=lambda **kw: capt.update(kw) or "finanzas@inversoragcp.com"), \
+             patch.object(nc, "update_props"):
+            r = crm.procesar("p7")
+        assert r["ok"] is True
+        assert capt["adjuntos"] == [
+            {"name": "factura-octubre.pdf", "url": "https://s3.notion/factura.pdf"},
+            {"name": "detalle.pdf", "url": "https://ejemplo.cl/detalle.pdf"},
+        ]
+
+    def test_sin_archivos_envia_igual_sin_adjuntos(self):
+        page = _page_crm()
+        del page["properties"][crm.ADJUNTOS]   # columna ausente: no debe romper
+        capt = {}
+        with patch.object(nc, "get_page", return_value=page), \
+             patch.object(es, "enviar", side_effect=lambda **kw: capt.update(kw) or "finanzas@inversoragcp.com"), \
+             patch.object(nc, "update_props"):
+            r = crm.procesar("p8")
+        assert r["ok"] is True
+        assert capt["adjuntos"] == []

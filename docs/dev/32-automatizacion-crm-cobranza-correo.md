@@ -41,7 +41,8 @@ envía sin configuración adicional.
 |---|---|---|---|
 | Nombre / razón social | `Sw` | title | también es el **identificador** de la fila |
 | Destinatario | `email` | email | **minúscula** |
-| Monto (opcional) | `Tarifa de cobro mensual` | number | si vacío/0 → correo sin tarjeta de monto |
+| Monto (opcional) | `Honorario del mes` | number | si vacío/0 → correo sin tarjeta de monto |
+| Adjuntos (opcional) | `Archivos y multimedia` | files | se adjuntan al correo (ej. la factura); vacío → sin adjuntos |
 
 **Write-back (3 columnas creadas el 20-jul vía `update_data_source`):**
 
@@ -141,3 +142,19 @@ En **🔓 CRM Comercial**:
 ---
 
 **Anterior:** [`31-mejoras-robustez-correo-jul-2026.md`](31-mejoras-robustez-correo-jul-2026.md) · **Volver al** [`README`](README.md)
+
+---
+
+## §9 · Cambio 05-oct-2026 — monto del mes + adjuntos
+
+La base fue renombrada a **🔓 Gestión de Cobros** (mismo data source `2961d0d2-…`, verificado por API).
+La columna `Tarifa de cobro mensual` **ya no existía**, por lo que el correo salía sin tarjeta de monto.
+
+- **Monto:** ahora se lee de `Honorario del mes` (number). Misma regla: vacío/0 → sin tarjeta.
+- **Adjuntos:** los archivos de `Archivos y multimedia` se adjuntan al correo, reutilizando la misma
+  descarga que Tickets (`nc.files` + `es._descargar_adjuntos`, tope total `MAX_ADJUNTOS_MB` = 15 MB).
+  Columna ausente o vacía → el correo sale igual, sin adjuntos.
+- **Tests:** 3 nuevos en `tests/test_crm.py` (nombres de columnas, adjuntos, sin adjuntos).
+- Las URLs de archivos subidos a Notion expiran ~1 h, pero se leen en el mismo momento del clic,
+  así que no afecta.
+

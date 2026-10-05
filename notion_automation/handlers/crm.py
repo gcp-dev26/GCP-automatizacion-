@@ -1,4 +1,4 @@
-"""Handler del botón de cobranza en la página 'CRM Comercial'.
+"""Handler del botón de cobranza en la página '🔓 Gestión de Cobros' (ex 'CRM Comercial').
 
 Cobranza de honorarios por servicios contables. A diferencia de F29/RRHH/Tickets
 (donde el remitente sale del asesor asignado a la fila), aquí el remitente es
@@ -6,8 +6,10 @@ FIJO: finanzas@inversoragcp.com (registrado como remitente virtual 'Finanzas' en
 asesores_smtp.json). Es el único correo que envía desde esta página.
 
 - Destinatario: el cliente (columna 'email', tipo email, en minúscula).
-- Contenido: recordatorio de pago + monto (columna 'Tarifa de cobro mensual',
+- Contenido: recordatorio de pago + monto (columna 'Honorario del mes',
   opcional) + la cuenta bancaria de GCP (constante BANCO_GCP_* de email_sender).
+- Adjuntos: los archivos de la columna 'Archivos y multimedia' (ej. la factura)
+  van adjuntos al correo (opcional; descarga y tope en email_sender).
 - Identificación de la fila: por 'Sw' (title) — ver el router en app.py.
 - Avisos de error: didáctico a Carlos + técnico al admin (doc 24 §8 y doc 32).
 
@@ -36,7 +38,8 @@ ASUNTO = "Honorarios servicios contables Inversora GCP"
 # Columnas (nombres EXACTOS verificados por API — Notion distingue mayúsculas)
 SW = "Sw"                            # title = nombre / razón social del cliente
 EMAIL_CLIENTE = "email"              # tipo email (minúscula)
-TARIFA = "Tarifa de cobro mensual"   # number → monto de la cobranza (opcional)
+TARIFA = "Honorario del mes"         # number → monto de la cobranza (opcional)
+ADJUNTOS = "Archivos y multimedia"   # files → se adjuntan al correo (opcional)
 
 # Write-back (columnas nuevas creadas en CRM Comercial, doc 32). 'Fecha envío'
 # con e minúscula, igual que RRHH/Tickets (verificar el nombre EXACTO en Notion).
@@ -94,9 +97,10 @@ def procesar(page_id: str) -> dict:
     cliente = nc.plain(props.get(SW, {}))
     email = nc.plain(props.get(EMAIL_CLIENTE, {}))
     monto = nc.plain(props.get(TARIFA, {}))
+    adjuntos = nc.files(props.get(ADJUNTOS, {}))
 
-    log.info("crm page_id=%s cliente_present=%s email_present=%s monto_present=%s",
-             page_id, bool(cliente), bool(email), bool(monto))
+    log.info("crm page_id=%s cliente_present=%s email_present=%s monto_present=%s adjuntos_n=%d",
+             page_id, bool(cliente), bool(email), bool(monto), len(adjuntos))
 
     def _alertar(motivo: str):
         # Didáctico → Carlos; técnico → admin (ADMIN_ALERT_EMAIL). Ver doc 32.
@@ -133,6 +137,7 @@ def procesar(page_id: str) -> dict:
             mes="",            # CRM no usa periodo/fecha límite
             monto="0",         # el monto va por extra_vars (tarjeta), no por el flujo F29
             nombre_asesor=REMITENTE,   # remitente FIJO = Finanzas
+            adjuntos=adjuntos,
             template="crm_email",
             asunto=ASUNTO,
             extra_vars=extra_vars,
