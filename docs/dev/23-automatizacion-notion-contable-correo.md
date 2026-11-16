@@ -1020,3 +1020,21 @@ Correr contra una base **destino de prueba** partiendo de una copia de Mayo:
 ---
 
 **Anterior:** [`22-via-oficial-certificado-digital-api-sii.md`](22-via-oficial-certificado-digital-api-sii.md) · **Volver al** [`README`](README.md)
+
+---
+
+## Cambio 16-nov-2026 — cuenta BCI (Gcp Patrimonio) para clientes 27 Bis y Cumplimiento
+
+Los clientes del Contable cuya columna **`asignacion `** (select, con espacio final) es **`27 Bis`** o
+**`Cumplimiento`** transfieren a la cuenta de **Gcp Patrimonio Estratégico Limitada** (Banco Bci, cuenta
+corriente en pesos N° 70839202, RUT 78.456.673-0), no a la Santander de Inversora GCP.
+
+- `app._procesar_page` lee la categoría (búsqueda tolerante con `_clave_prop`) y pasa
+  `cuenta=es.CUENTA_PATRIMONIO` a `es.enviar` → `es.render`. Categorías en
+  `CATEGORIAS_CUENTA_PATRIMONIO` (app.py); datos bancarios en `BANCO_PATRIMONIO_*` (email_sender.py).
+- **Con impuesto a pagar:** recuadro "Datos para transferir el impuesto" con la cuenta BCI y
+  "Enviar comprobante a: finanzas@inversoragcp.com", aunque la fila no tenga honorarios. Va en el mismo
+  marcador que la fecha límite (no se tocaron las plantillas).
+- **Honorarios:** el recuadro de honorarios de esos clientes muestra la cuenta BCI, nunca la Santander.
+- Resto de las categorías: sin cambios. El log del envío incluye `cuenta=gcp|patrimonio`.
+- Tests: `tests/test_f29_cuenta_patrimonio.py`.
