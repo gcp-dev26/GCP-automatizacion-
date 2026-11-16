@@ -75,6 +75,20 @@ BCC_EXTRA = [
     MONITOR_EMAIL,
 ]
 
+# Cuenta de Gcp Patrimonio Estratégico (BCI): la usan los clientes F29 con
+# categoría '27 Bis' o 'Cumplimiento' (columna 'asignacion ' del Contable), en
+# vez de la Santander de Inversora GCP. Pedido del 16-nov-2026; ver doc 23.
+CUENTA_PATRIMONIO = "patrimonio"
+BANCO_PATRIMONIO_HTML = (
+    "Banco Bci · Cuenta Corriente en pesos<br>N° 70839202<br>"
+    "RUT: 78.456.673-0<br>Razón Social: Gcp Patrimonio Estratégico Limitada"
+)
+BANCO_PATRIMONIO_TXT = (
+    "Banco Bci, Cuenta Corriente en pesos N° 70839202, "
+    "RUT 78.456.673-0, Razón Social Gcp Patrimonio Estratégico Limitada"
+)
+EMAIL_COMPROBANTE_PATRIMONIO = "finanzas@inversoragcp.com"
+
 PREVIRED_URL = "https://www.previred.com/wPortal/login/login.jsp"
 
 BANCO_GCP_HTML = (
@@ -290,7 +304,34 @@ def _bloque_fecha_rrhh(d: datetime.date) -> tuple[str, str]:
     return html, txt
 
 
-def _bloque_honorarios(monto_h: str) -> tuple[str, str]:
+def _datos_banco(cuenta: str) -> tuple[str, str]:
+    """(html, txt) de la cuenta a la que transfiere el cliente."""
+    if cuenta == CUENTA_PATRIMONIO:
+        return BANCO_PATRIMONIO_HTML, BANCO_PATRIMONIO_TXT
+    return BANCO_GCP_HTML, BANCO_GCP_TXT
+
+
+def _bloque_cuenta_pago(cuenta: str) -> tuple[str, str]:
+    """Recuadro 'Transfiera el impuesto a esta cuenta' (solo cuenta Patrimonio,
+    cuando hay impuesto a pagar): esos clientes le transfieren el IVA a GCP."""
+    if cuenta != CUENTA_PATRIMONIO:
+        return "", ""
+    html = (
+        '<div style="margin:0 0 18px 0;background:#eef3fb;border:1px solid #cdd8f0;'
+        'border-left:4px solid #0B1F3A;border-radius:12px;padding:18px 22px;">'
+        '<div style="font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;'
+        'color:#0B1F3A;margin-bottom:10px;">Datos para transferir el impuesto</div>'
+        f'<div style="font-size:14px;color:#3a4658;line-height:1.9;">{BANCO_PATRIMONIO_HTML}</div>'
+        '<div style="margin-top:10px;font-size:13px;color:#3a4658;">Enviar comprobante a: '
+        f'<a href="mailto:{EMAIL_COMPROBANTE_PATRIMONIO}" style="color:#0B1F3A;font-weight:700;">'
+        f'{EMAIL_COMPROBANTE_PATRIMONIO}</a></div></div>'
+    )
+    txt = (f"Datos para transferir el impuesto: {BANCO_PATRIMONIO_TXT}. "
+           f"Enviar comprobante a: {EMAIL_COMPROBANTE_PATRIMONIO}.")
+    return html, txt
+
+
+def _bloque_honorarios(monto_h: str, cuenta: str = "") -> tuple[str, str]:
     try:
         h = float(monto_h)
     except (ValueError, TypeError):
@@ -298,6 +339,7 @@ def _bloque_honorarios(monto_h: str) -> tuple[str, str]:
     if h <= 0:
         return "", ""
     m = clp(h)
+    banco_html, banco_txt = _datos_banco(cuenta)
     html = (
         '<div style="margin:0 0 18px 0;background:#fff8ec;border:1px solid #f2e2bf;'
         'border-left:4px solid #E7A100;border-radius:12px;padding:18px 22px;">'
@@ -309,11 +351,11 @@ def _bloque_honorarios(monto_h: str) -> tuple[str, str]:
         'border-radius:8px;font-size:13px;color:#3a4658;line-height:1.7;">'
         f'<div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;'
         f'color:#9a7400;margin-bottom:6px;">Datos para la transferencia</div>'
-        f'{BANCO_GCP_HTML}</div></div>'
+        f'{banco_html}</div></div>'
     )
     txt = (
         f"Honorarios de la asesoría: {m}. "
-        f"Datos para la transferencia: {BANCO_GCP_TXT}."
+        f"Datos para la transferencia: {banco_txt}."
     )
     return html, txt
 
@@ -378,8 +420,10 @@ def render(
     titulo_override: str = "", mensaje_override: str = "",
     bloque_fecha_override: str = "", linea_fecha_override: str = "",
     extra_vars: dict | None = None,
+    cuenta: str = "",
 ) -> tuple[str, str]:
-    """Carga la plantilla y reemplaza los marcadores. Devuelve (html, txt)."""
+    """Carga la plantilla y reemplaza los marcadores. Devuelve (html, txt).
+    `cuenta`: '' (Inversora GCP, Santander) o CUENTA_PATRIMONIO (BCI)."""
     if titulo_override:
         titulo, msg = titulo_override, mensaje_override
     else:
@@ -397,7 +441,12 @@ def render(
             d = fecha_limite(periodo)
             if d:
                 b_fecha = _bloque_fecha(d)
-    b_hono = _bloque_honorarios(honorarios)
+            # Cuenta Patrimonio: el recuadro de transferencia va pegado a la
+            # fecha límite (mismo marcador), así no se tocan las plantillas.
+            b_cta = _bloque_cuenta_pago(cuenta)
+            b_fecha = (b_fecha[0] + b_cta[0],
+                       "\n".join(x for x in (b_fecha[1], b_cta[1]) if x))
+    b_hono = _bloque_honorarios(honorarios, cuenta)
     b_info = _bloque_info(info_valor, info_motivo)
     b_adj = _bloque_adjuntos(msg_adjuntos)
     info_texto = _combinar_info(info_valor, info_motivo)
@@ -505,6 +554,7 @@ def enviar(
     asunto: str | None = None,
     extra_vars: dict | None = None,
     custom_args: dict | None = None,
+    cuenta: str = "",
 ) -> str:
     """Envía el correo por SMTP de Gmail. El remitente es el asesor del cliente.
     Devuelve el email del remitente usado (para log sin PII del destinatario).
@@ -568,6 +618,7 @@ def enviar(
             honorarios, info_valor, info_motivo, msg_adjuntos, firma_html,
             template=template,
             extra_vars=extra_vars,
+            cuenta=cuenta,
         )
 
     # Asunto: si se pasa explícito, usarlo; si no, dinámico por mes (F29).

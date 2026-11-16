@@ -142,6 +142,10 @@ P_ADJUNTOS = "Adjuntos"   # files & media — PDFs que se adjuntan al correo
 P_MSG_ADJUNTOS = "Mensaje Adjuntos"   # rich_text — nota del asesor sobre los adjuntos
 P_FECHA_ENVIO = "Fecha Envío"   # date — fecha y hora en la que se envió el correo
 STATUS_ENVIADO = "1) Enviado y Pendiente"
+# Categorías (columna 'asignacion ', con espacio final en Notion) cuyos clientes
+# transfieren a la cuenta BCI de Gcp Patrimonio en vez de la Santander (16-nov-2026).
+P_ASIGNACION = "asignacion"
+CATEGORIAS_CUENTA_PATRIMONIO = {"27 bis", "cumplimiento"}
 
 
 def _procesar_page(page_id: str) -> dict:
@@ -163,6 +167,10 @@ def _procesar_page(page_id: str) -> dict:
     nombre_asesor = asesor_nombres[0] if asesor_nombres else ""
     adjuntos = nc.files(props.get(P_ADJUNTOS, {}))
     msg_adjuntos = nc.plain(props.get(P_MSG_ADJUNTOS, {}))
+    clave_asig = _clave_prop(props, P_ASIGNACION)
+    categoria = nc.plain(props.get(clave_asig, {})) if clave_asig else ""
+    cuenta = (es.CUENTA_PATRIMONIO
+              if categoria.strip().lower() in CATEGORIAS_CUENTA_PATRIMONIO else "")
 
     # El mes se determina PRIORITARIAMENTE desde el título de la base parent
     # ("Contable Julio" -> "Julio 2026"). Cuando Carlos duplica una página
@@ -187,9 +195,10 @@ def _procesar_page(page_id: str) -> dict:
 
     # Log sin PII (resto)
     log.info(
-        "page_id=%s cliente=%r asesor=%r mes_present=%s mes_origen=%s hono_present=%s info_valor_present=%s info_motivo_present=%s msg_adj_present=%s adjuntos_n=%d",
+        "page_id=%s cliente=%r asesor=%r mes_present=%s mes_origen=%s hono_present=%s info_valor_present=%s info_motivo_present=%s msg_adj_present=%s adjuntos_n=%d cuenta=%s",
         page_id, nombre, nombre_asesor, bool(mes), mes_origen,
         bool(honorarios), bool(info_valor), bool(info_motivo), bool(msg_adjuntos), len(adjuntos),
+        cuenta or "gcp",
     )
 
     def _alertar_error(motivo: str):
@@ -227,6 +236,7 @@ def _procesar_page(page_id: str) -> dict:
             msg_adjuntos=msg_adjuntos,
             adjuntos=adjuntos,
             custom_args={"page_id": page_id, "flujo": "f29"},
+            cuenta=cuenta,
         )
         log.info("correo enviado OK · page_id=%s remitente=%s", page_id, remitente)
     except ValueError as exc:
